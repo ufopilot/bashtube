@@ -1,0 +1,1312 @@
+#!/bin/bash
+	##############################################################################################################################
+# Script: 		bashtube
+# Author: 		UFOPILOT
+# Date:   		04.04.2018
+# Description: 	Youtube from commandline
+##############################################################################################################################
+
+# *************************************
+# FUNCTIONS
+# *************************************
+function cfg_parser (){
+	# -------------------------------------------------------
+	# Arguments: ini-file string than cfg.section.secname
+	# Desc: return sourced variables from ini-file 
+	#--------------------------------------------------------
+	
+	# usage:
+	# parse the config file called 'myfile.ini', with the following
+	# contents::
+	#   [sec2]
+	#   var2='something'
+	#cfg_parser 'myfile.ini'
+	
+	# enable section called 'sec2' (in the file [sec2]) for reading
+	#cfg.section.sec2
+	
+	# read the content of the variable called 'var2' (in the file
+	# var2=XXX). If your var2 is an array, then you can use
+	# ${var[index]}
+	#echo "$var2"
+	
+    ini="$(<$1)"                # read the file
+    ini="${ini//[/\[}"          # escape [
+    ini="${ini//]/\]}"          # escape ]
+    IFS=$'\n' && ini=( ${ini} ) # convert to line-array
+    ini=( ${ini[*]//;*/} )      # remove comments with ;
+    ini=( ${ini[*]/\    =/=} )  # remove tabs before =
+    ini=( ${ini[*]/=\   /=} )   # remove tabs be =
+    ini=( ${ini[*]/\ =\ /=} )   # remove anything with a space around =
+    ini=( ${ini[*]/#\\[/\}$'\n'cfg.section.} ) # set section prefix
+    ini=( ${ini[*]/%\\]/ \(} )    # convert text2function (1)
+    ini=( ${ini[*]/=/=\( } )    # convert item to array
+    ini=( ${ini[*]/%/ \)} )     # close array parenthesis
+    ini=( ${ini[*]/%\\ \)/ \\} ) # the multiline trick
+    ini=( ${ini[*]/%\( \)/\(\) \{} ) # convert text2function (2)
+    ini=( ${ini[*]/%\} \)/\}} ) # remove extra parenthesis
+    ini[0]="" # remove first element
+    ini[${#ini[*]} + 1]='}'    # add the last brace
+    eval "$(echo "${ini[*]}")" # eval the result
+}
+_script()
+{
+  _script_commands=$(./admin.sh shortlist)
+
+  local cur prev
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  COMPREPLY=( $(compgen -W "${_script_commands}" -- ${cur}) )
+
+  return 0
+}
+complete -o nospace -F _script ./admin.sh
+
+function setSearchFilter(){
+	# -------------------------------------------------------
+	# Arguments: $1 string
+	# Desc: set youtube search-filter
+	# -------------------------------------------------------
+    local filter=$1
+	case $filter in 
+	   "hour") 	SEARCHFILTER="&sp=EgIIAQ%253D%253D";;
+	   "day")	SEARCHFILTER="&sp=EgIIAg%253D%253D";;
+	   "week")	SEARCHFILTER="&sp=EgIIAw%253D%253D";;
+	   "month")	SEARCHFILTER="&sp=EgIIBA%253D%253D";;
+	   "year")	SEARCHFILTER="&sp=EgIIBQ%253D%253D";;
+	   "none"|*)  SEARCHFILTER="";;
+	   *)  cmdUsage filter; return;;
+	esac
+	if [ "$(echo $@|awk '{print $NF}')" != "init" ]; then 
+	   tput cup $OUTPUTROW 2; echo -e "[INFO] : filter = $FILTER"
+	fi
+}
+function green(){
+	# -------------------------------------------------------
+	# Arguments: $@ string
+	# Desc: return colored string
+	# -------------------------------------------------------
+    echo "${GREEN}${@}${NC}"
+}
+function blue(){
+	# -------------------------------------------------------
+	# Arguments: $@ string
+	# Desc: return colored string
+	# -------------------------------------------------------
+	echo "${BLUE}${@}${NC}"
+}
+function red(){
+	# -------------------------------------------------------
+	# Arguments: $@ string
+	# Desc: return colored string
+	# -------------------------------------------------------
+    echo -e "${RED}${@}${NC}"
+}
+function setProxy(){
+    # -------------------------------------------------------
+	# Arguments: $1..$4 strings
+	# Desc: set proxy url,user,password
+	# -------------------------------------------------------
+	case $1 in 
+		"true")
+		    host=$(echo $2 |sed 's|http://||; s|https://||')
+		    [ "$3" != "" ] && {
+				export http_proxy="http://$3:$4@$host";
+				export https_proxy="http://$3:$4@$host"
+			}  || 
+				export http_proxy="http://$host";
+				export https_proxy="http://$host"
+		 ;;
+		 *)
+			export http_proxy='';
+			export https_proxy=''
+		;;
+	esac
+}
+function download(){
+    # -------------------------------------------------------
+	# Arguments: $1 - watch-query v=???????
+	# Desc: download youtube video and convert to mp3, ....
+	# -------------------------------------------------------	
+	(
+     $YouDL -o "$DOWNLOADDIR" --extract-audio --audio-quality ${DOWNLOADRATE}K --audio-format $DOWNLOADFORMAT --embed-thumbnail --add-metadata  $1 >/dev/null 2>/dev/null
+     #[ $? -eq 0 ] && DOWNLOADS[$2]="successfull" || DOWNLOADS[$INDEX]="failed"    
+	)&	
+}
+function play(){
+    # -------------------------------------------------------
+	# Arguments: $1 int. Title-Index  
+	# Global variables: VIDEOON, AUDIOON
+	# Desc: play selected Audio or Video with mplayer
+	# -------------------------------------------------------	
+	if [ "$VIDEOON" = "true" -a "$AUDIOON" = "true" ]; then 
+       ($MPlayer -slave -quiet -framedrop -cache 384 -xy ${SIZE} -geometry ${COORDX}:${COORDY} -cookies -cookies-file $YCookie $($YouDL -gf 18 "${YWatch}?v=$1") >/dev/null 2>&1) &
+	  
+    fi
+	if [  "$VIDEOON" = "false" -a "$AUDIOON" = "true" ]; then 
+       ($MPlayer -slave -quiet -vo null -framedrop -cache 384 -cookies -cookies-file $YCookie $($YouDL -gf 18 "${YWatch}?v=$1") >/dev/null 2>&1) &
+    fi 
+	if [  "$VIDEOON" = "true" -a "$AUDIOON" = "false" ]; then 
+       ($MPlayer -slave -quiet -nosound -framedrop -cache 384 -xy ${SIZE} -geometry ${COORDX}:${COORDY} -cookies -cookies-file $YCookie $($YouDL -gf 18 "${YWatch}?v=$1") >/dev/null 2>&1) &
+    fi 
+	if [  "$VIDEOON" = "false" -a "$AUDIOON" = "false" ]; then 
+       return 1
+    fi 
+	disown
+}
+function playAll(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Desc: play the whole visible search-resultlist
+	# -------------------------------------------------------
+	$PLAYALL "$(echo ${QUERIES[@]})" >/dev/null 2>&1 &
+	disown
+}
+function playPlayList(){
+    # -------------------------------------------------------
+	# Arguments: none
+	# Desc: play my local created list
+	# -------------------------------------------------------
+	$($MPlayer -vo null -slave -idle -quiet -framedrop -cache 384 -cookies -cookies-file $YCookie $(cat playlist.txt) >/dev/null 2>&1)&
+	
+}
+function searchYoutube(){
+    # -------------------------------------------------------
+	# Arguments: none 
+	# Global variables SEARCHSTRING, SEARCHFILTER
+	# Desc: youtube-search (called from getResults function)
+	# -------------------------------------------------------
+    curl -sk --connect-timeout 5 ${YSearch}\=${SEARCHSTRING}${SEARCHFILTER}|sed 's/|//g'|grep -o 'watch?v=\([^"]*\)"[^>]*title="\([^"]*\)"\([^>]*>\)\{3\}[^:]*:\([^<]*\)'|sed  's/watch?v=\([^"]*\)"[^>]*title="\([^"]*\)"\([^>]*>\)\{3\}[^:]*:\([^<]*\)/\2 | \4 | \1/g'|sed  's/  / /g; s/&.*;//g'
+}
+function drawLegend(){
+    # -------------------------------------------------------
+	# Arguments: $1 string  
+	# Desc: set color and bg-color for legends/captions
+	# -------------------------------------------------------
+    setBgColor ${STYLE[2]}
+    setColor ${STYLE[3]}
+    echo "  $@ "
+    clearTput
+}
+function clearResultLines(){
+    # -------------------------------------------------------
+	# Arguments: none 
+	# Desc: clear result table
+	# -------------------------------------------------------
+    local j=""
+	for ((j=13; j<=36; j++))
+	do
+		tput cup ${j} 2 && clearLine
+	done
+}
+function getResults(){
+    # -------------------------------------------------------
+	# Arguments: $@ string 
+	# Global variables RESULTCOLS, OUTPUTROW, GREEN
+	# Desc: draw results from function searchYoutube
+	# -------------------------------------------------------
+    clearResultLines
+    [ $# -eq 0 ] && { cmdUsage search;  return 1; } || { TYPEDSTRING=$@; SEARCHSTRING=$(echo $@|sed 's/\(.\) \(.\)/\1+\2/g'|tr -d '[:space:]'); }
+    [ "$SEARCHSTRING" = "" ] && { cmdUsage search;  return 1; }
+    goToOutput
+    echo -e "[INFO] : search $(blue $TYPEDSTRING) (Please wait!)"
+    tput cup 10 2
+    drawLegend "RESULTS: $TYPEDSTRING"
+    TITLES=()
+    QUERIES=()
+    TIMES=()
+    i=0
+    IFS="|"
+    RESULTS=$(searchYoutube)
+    (echo "$RESULTS"|awk -F"|" -v maxrescols="$RESULTCOLS" '
+      BEGIN{ 
+	     i=0; dr; tl;
+		 system("tput cup 12 2; tput setaf 4; tput setab 6");
+		 printf "%4s| %-15s| %-"maxrescols"s \n","#","Duration","Title";
+		 system("tput setaf 7; tput sgr0")
+	  }
+ 	  {  
+		if($1 == "") continue;
+		title="Title: "$1;
+ 		time="Time:"$2;
+ 		if (length($2)  < 5) time="List:"$2;
+		if (length($2) > 9) time="List";
+		tl[i] = title;
+		dr[i] = time;
+		if(i == 23) break;
+ 		i++;
+      }
+	  END{
+        for (i = 0; i < length(tl); i++){
+		    col=13+i;
+			system("tput cup " col " 2");
+			#system("tput setaf 1")
+			#printf "%4d| %-15s| %-130s \n",i,time,title;
+			#system("tput setaf 7")
+			printf "%4d| %-15s| %-."maxrescols"s \n",i+1,dr[i],tl[i];
+	   } 
+   }')&
+    usleep 500000
+    while read title time query
+    do
+      [ ${#time}  -lt 5 -o ${#time} -gt 9 ] && time="List: $time"
+      TITLES[$i]="Title: $title"
+      TIMES[$i]="Time: $time"
+	  QUERIES[$i]="$(echo $query|tr -d '[:space:]')"
+	  i=$((++i))
+    done< <( echo "$RESULTS" )
+  
+    tput cup $OUTPUTROW 2
+    clearLine
+    tput cup $OUTPUTROW 2
+    echo -e "[INFO] search ${GREEN}done${NC}"
+}
+function drawPanels(){
+    # -------------------------------------------------------
+	# Arguments: none 
+	# Global variables: HORCHAR COLS, OUTPUTROW, GREEN
+	# Desc: draw panels
+	# -------------------------------------------------------
+	local c=$HORCHAR
+	setColor ${STYLE[0]}
+	linepartx=$(printf "%0.s$c" {1..10})
+	tput cup 1 1
+	for ((x=1; x<=$COLS; x+=20))
+	do
+		printf "%s" "$linepartx$linepartx"
+	done
+	tput cup 9 1
+	for ((x=1; x<=$COLS; x+=20))
+	do
+		printf "%s" "$linepartx$linepartx"
+	done
+	tput cup $(($ROWS-4)) 1
+	for ((x=1; x<=$COLS; x+=20))
+	do
+		printf "%s" "$linepartx$linepartx"
+	done
+	tput cup $ROWS 1
+	for ((x=1; x<=$COLS; x+=20))
+	do
+		printf "%s" "$linepartx$linepartx"
+	done
+	setColor white   
+}
+function drawVLine(){
+	# -------------------------------------------------------
+	# Arguments: $1 int, $2 int, $3 int(x,y,height)
+	# Global variables: VERCHAR
+	# Desc: draw vertical line
+	# -------------------------------------------------------
+	local c=$VERCHAR
+	x=$1 y=$2 h=$3
+	#x y height
+	setColor ${STYLE[0]}
+	for ((i=$y; i<=$h; i++))
+	do
+		tput cup $(($y+$i)) $x
+		echo "$c"
+	done
+	setColor white
+}
+function drawHeader(){
+    # -------------------------------------------------------
+	# Arguments: none
+	# Global variables: 
+	# Desc: draw header-logo
+	# -------------------------------------------------------
+    local x=5
+    local y=2
+    setColor ${STYLE[1]} 
+    tput cup $y $x
+    echo '||\\'
+    tput cup $(($y+1)) $x
+    echo '||||\\'
+    tput cup $(($y+2)) $x
+    echo '||||||\\'
+    tput cup $(($y+3)) $x
+    echo "||||||//"
+    tput cup $(($y+4)) $x
+    echo "||||//"
+    tput cup $(($y+5)) $x
+    echo "||//"
+    tput cup $(($y+6)) $x
+	echo "________________________________________________________ By UFOPILOT"
+	#echo " ------------------------------------------------------- By UFOPILOT"
+    
+    setColor ${STYLE[1]} 
+    tput cup 2 $(($x+9))
+    echo "   ____           _____ _    _ _______ _    _ ____  ______"
+    tput cup 3 $(($x+9))
+    echo "  |  _ \   /\    / ____| |  | |__   __| |  | |  _ \|  ____|"
+    tput cup 4 $(($x+9))
+    echo "  | |_) | /  \  | (___ | |__| |  | |  | |  | | |_) | |__   "
+    tput cup 5 $(($x+9))
+    echo "  |  _ < / /\ \  \___ \|  __  |  | |  | |  | |  _ <|  __|  "
+    tput cup 6 $(($x+9))
+    echo "  | |_) / ____ \ ____) | |  | |  | |  | |__| | |_) | |____ "
+    tput cup 7 $(($x+9))
+    echo "  |____/_/    \_\_____/|_|  |_|  |_|   \____/|____/|______|"
+    tput cup 8 $(($x+9))
+    #echo "  _____________________________________________ By UFOPILOT"
+    #setColor white 
+}
+function infoBlock(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Global INFOCOL: INFOROW
+	# Desc: draw settings block
+	# -------------------------------------------------------
+	local x=$INFOCOL
+	local y=$INFOROW
+	tput cup $y $x
+	drawLegend "  SETTINGS  "
+	tput cup $((++y)) $((x+=3))
+	printf "%-10s: %-6s" "Audio" "$AUDIOON"
+	tput cup $((++y)) $x
+	printf "%-10s: %-6s" "Video" "$VIDEOON"
+	tput cup $((++y)) $x
+	printf "%-10s: %-6s" "Filter" "$FILTER"
+	tput cup $((++y)) $x
+	printf "%-10s: %-6s" "Proxy" "$PROXY"
+	tput cup $((++y)) $x
+	printf "%-10s: %-6s" "DL-Dir" "$DOWNLOADDIR"
+	y=$(($y-5))
+	tput cup $((++y)) $(($x+30))
+	printf "%-10s: %-6s" "DL-Format" "$DOWNLOADFORMAT"
+	tput cup $((++y)) $(($x+30))
+	printf "%-10s: %-6s" "Bitrate" "$DOWNLOADRATE"
+	tput cup $((++y)) $(($x+30))
+	printf "%-10s: %-6s" "Playlist" "$SELECTEDLIST"
+}
+function clearLine(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Global RESULTCOLS
+	# Desc: clear result line
+	# -------------------------------------------------------
+    local LINE=$(($RESULTCOLS+25))
+    for ((i=1; i<$LINE; i++)); do printf " "; done
+}
+function clearOutputLine(){
+    # -------------------------------------------------------
+	# Arguments: none
+	# Global COLS
+	# Desc: clear output line
+	# -------------------------------------------------------
+	local LINE=$(($COLS-3))
+    for ((i=1; i<$LINE; i++)); do printf " "; done
+}
+function hideCursor(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Desc: make cursor invisible
+	# -------------------------------------------------------	
+	tput civis
+}
+function showCursor(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Desc: make cursor invisible
+	# -------------------------------------------------------
+	tput cnorm
+}
+function clearOutput(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Desc: clear output area
+	# -------------------------------------------------------
+	goToOutput
+	clearOutputLine
+	goToOutput +1
+	clearOutputLine
+	goToOutput +2
+	clearOutputLine
+}
+function goToOutput(){
+	# -------------------------------------------------------
+	# Arguments: $1 string (+1, +2, +3)
+	# Desc: go to first, second or third line in output area 
+	# -------------------------------------------------------
+	# goToOutput, goToOutput +1, goToOutput +2
+	local row=$OUTPUTROW
+	[ $1 ] && eval 'row=$((${row}${1}))'
+	tput cup $row 2	
+}
+function setColor(){
+	# -------------------------------------------------------
+	# Arguments: $1 string
+	# Desc: set text color
+	# -------------------------------------------------------
+	case $1 in 
+		"black") val=0;;
+		"red")  val=1;;
+		"green")  val=2;;
+		"yellow")  val=3;;
+		"blue") val=4;;
+		"magenta") val=5;;
+		"cyan")  val=6;;
+		"white") val=7;;
+	esac
+	tput setaf $val
+}
+function setBgColor(){
+	# -------------------------------------------------------
+	# Arguments: $@ string
+	# Desc: set background color
+	# -------------------------------------------------------
+	case $1 in 
+		"black") val=0;;
+		"red")  val=1;;
+		"green")  val=2;;
+		"yellow")  val=3;;
+		"blue") val=4;;
+		"magenta") val=5;;
+		"cyan")  val=6;;
+		"white") val=7;;
+	esac
+	tput setab $val
+}
+function clearTput(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Desc: tput all off
+	# -------------------------------------------------------
+	tput sgr0
+}
+
+function goToRightPanel(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Desc: go to rightpanel 
+	# -------------------------------------------------------
+	# goToOutput, goToOutput +1, goToOutput +2
+	local y=$RIGHTPANELY
+	[ $1 ] && eval 'y=$((${y}${1}))'
+	local x=$RIGHTPANELX
+	tput cup $y $x	
+}
+function clearRightPanel(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Desc: clear whole right oanel
+	# -------------------------------------------------------
+	local y=$RIGHTPANELY
+	local h=$RIGHTPANELH
+	local w=$RIGHTPANELW
+	local x=$RIGHTPANELX
+	for ((i=$y; i<$h; i++))
+	do
+		tput cup $i $x
+		for ((j=1; j<$w; j++)); do printf " "; done
+	done
+}
+
+function cmdUsage(){
+	# -------------------------------------------------------
+	# Arguments: $1 string (command)
+	# Desc: return command-usage
+	# -------------------------------------------------------
+	[ $1 ] && {
+		goToRightPanel
+		clearRightPanel 
+		local col=10
+		local row=100
+		
+		tput cup $col $row 
+		echo -e "${YELLOW}HELP:   ${NC}"
+		col=$(($col+1))
+		row=$(($row+1))
+		
+		tput cup  $((++col)) $row 
+		echo -e "${GREEN}${1}${NC}"
+		tput cup $((++col)) $row 
+		
+		setColor white
+		
+		case $1 in
+		audio|video)
+				tput cup $((++col)) $row
+				echo "desc: set a$1 on/off"
+				tput cup $((++col)) $row
+				echo "alias: ${1:0:1}"
+				tput cup $((++col)) $row
+				echo "uasge: $1 <true|false>"
+				tput cup $((++col)) $row
+				echo "example: $1 true"
+				;;
+		commands)  
+				tput cup $((++col)) $row
+				echo "desc: show all commands"
+				tput cup $((++col)) $row
+				echo "uasge: $1"
+				;;
+		config)  
+				tput cup $((++col)) $row
+				echo "desc: write a new config"
+				tput cup $((++col)) $row
+				echo "uasge: $1"
+				
+				tput cup $((++col)) $row
+				echo "in progress"
+				;;
+		download)  
+				tput cup $((++col)) $row
+				echo "desc: download youtube file"
+				tput cup $((++col)) $row
+				echo "alias: all"
+				tput cup $((++col)) $row
+				echo "uasge: $1 <int: from list>"
+				tput cup $((++col)) $row
+				echo "example: $1 6"
+				;;
+		bye|quit|exit)
+				tput cup $((++col)) $row
+				echo "desc: exit this program"
+				tput cup $((++col)) $row
+				echo "alias: quit, bye"
+				tput cup $((++col)) $row
+				echo "uasge: $1"
+				;;
+		filter) tput cup $((++col)) $row
+				echo "desc: set youtube search-filter"
+				tput cup $((++col)) $row;
+				echo "uasge: filter <option>"
+				tput cup $((++col)) $row
+				echo "alias: f"
+				tput cup $((++col)) $row
+				echo "options:" 
+				tput cup $((++col)) $row
+				echo "         hour   - last hour"
+				tput cup $((++col)) $row
+				echo "         day    - last day"
+				tput cup $((++col)) $row
+				echo "         week   - last week"
+				tput cup $((++col)) $row
+				echo "         month  - last month"
+				tput cup $((++col)) $row
+				echo "         year   - last year"
+				tput cup $((++col)) $row
+				echo "         none   - no filter"
+				;;
+		help)  
+				tput cup $((++col)) $row
+				echo "desc: show command help"
+				tput cup $((++col)) $row
+				echo "uasge: $1 <command>"
+				tput cup $((++col)) $row
+				echo "example: $1 search"
+				;;
+		history)  
+				tput cup $((++col)) $row
+				echo "desc: show command history "
+				tput cup $((++col)) $row
+				echo "uasge: $1 <true|false>"
+				tput cup $((++col)) $row
+				echo "example: $1 true"
+				;;
+		next)   tput cup $((++col)) $row
+				echo "desc: play next title from resultlist"
+				tput cup $((++col)) $row
+				echo "alias: ${1:0:1}"
+				tput cup $((++col)) $row
+				echo "uasge: $1"
+				;;
+		play)   tput cup $((++col)) $row
+				echo "desc: play title from resultlist"
+				tput cup $((++col)) $row
+				echo "alias: ${1:0:1}"
+				tput cup $((++col)) $row
+				echo "uasge: $1 <int: from list>"
+				tput cup $((++col)) $row
+				echo "example: $1 6"
+				;;
+		playall)   
+				tput cup $((++col)) $row
+				echo "desc: play all titles in resultlist"
+				tput cup $((++col)) $row
+				echo "uasge: $1"
+				tput cup $((++col)) $row
+				;;
+		playlist)
+				tput cup $((++col)) $row
+				echo "desc: my playlist from results"
+				tput cup $((++col)) $row
+				echo "usage: $1 [<option [option]>]"
+				tput cup $((++col)) $row
+				echo "  playlist - list all playlists"
+				tput cup $((++col)) $row
+				echo "options:" 
+				tput cup $((++col)) $row
+				echo "  create <listname> - add new playlist"
+				tput cup $((++col)) $row
+				echo "  remove <listname> - delete playlist"
+				tput cup $((++col)) $row
+				echo "  select <listname> - activate playlist"
+				tput cup $((++col)) $row
+				echo "  clear - clear selected playlist"
+				tput cup $((++col)) $row
+				echo "  add <int ...> - add titles to selected"
+				tput cup $((++col)) $row
+				echo "  start - start selected playlist"
+				;;
+		proxy)  
+				tput cup $((++col)) $row
+				echo "desc: set proxy on/off"
+				tput cup $((++col)) $row
+				echo "uasge: $1 <true|false>"
+				tput cup $((++col)) $row
+				echo "example: $1 true"
+				;;
+		proxyhost)  
+				tput cup $((++col)) $row
+				echo "desc: set $1"
+				tput cup $((++col)) $row
+				echo "uasge: $1"
+				;;
+		proxypassword)  
+				tput cup $((++col)) $row
+				echo "desc: set $1"
+				tput cup $((++col)) $row
+				echo "uasge: $1"
+				;;
+		proxyuser)  
+				tput cup $((++col)) $row
+				echo "desc: set $1"
+				tput cup $((++col)) $row
+				echo "uasge: $1"
+				;;
+		search) tput cup $((++col)) $row
+				echo "desc: search title in youtube"
+				tput cup $((++col)) $row
+				echo "alias: ${1:0:1}"
+				tput cup $((++col)) $row
+				echo "uasge: $1 <string1 string2 ...>"
+				tput cup $((++col)) $row
+				echo "example: $1 Buena Vista"
+				;;
+		stop|Stop)  
+				tput cup $((++col)) $row
+				echo "desc: stop playing"
+				tput cup $((++col)) $row
+				echo "uasge: $1 "
+				;;
+		update)  
+				tput cup $((++col)) $row
+				echo "desc: update youtube-dl"
+				tput cup $((++col)) $row
+				echo "uasge: $1 "
+				;;
+		esac	
+	}	
+}
+function playList(){
+	# -------------------------------------------------------
+	# Arguments: $1, ...
+	# Desc: create playlists
+	#--------------------------------------------------------
+	local action=$(echo $@|awk '{print $1}')
+	[ "$action" = "" ] && action=getlists
+	case $action in 
+		create)
+		    args=$(echo "$@" | sed 's/'$action'//; s/^ *//')
+		    [ "$args" = "" ] && { cmdUsage playlist; return 1; }
+			touch $PLAYLISTDIR/$args.lst
+			[ $? -eq 0 ] && { goToOutput; printInfo "Playlist $args successfully created"; } || { goToOutput; printError "create playlist failure"; } 
+		;;
+		remove)
+		    args=$(echo "$@" | sed 's/'$action'//; s/^ *//')
+		    [ "$args" = "" ] && { cmdUsage playlist; return 1; }
+			rm "$PLAYLISTDIR/$args.lst" >/dev/null 2>&1;
+			[ $? -eq 0 ] && { 
+				            goToOutput; printInfo "Playlist $args successfully removed"; 
+							[ "$SELECTEDLIST" = "$args" ] && { SELECTEDLIST=none; infoBlock; }
+							} || { goToOutput; printError "remove playlist failure"; } 
+		;;
+		select) 
+			SELECTEDLIST=$(echo "$@" | sed 's/'$action'//; s/^ *//')
+			[ "$SELECTEDLIST" != "" ] && { 
+					LISTQARRAY=()
+					LISTTARRAY=()
+					local lfile="$PLAYLISTDIR/$SELECTEDLIST.lst"
+					if [ -f "$lfile" ]
+					then
+					    while read line
+						do
+						   yq="$(echo $line|awk -F"|" '{print $1}')"
+						   yt="$(echo $line|awk -F"|" '{print $2}')"
+						   LISTQARRAY=(${LISTQARRAY[@]} "$yq")
+						   LISTTARRAY=(${LISTTARRAY[@]} "$yt")
+					   done< <(cat $lfile)
+					else
+					    goToOutput; printError "Playlist $SELECTEDLIST doesn't exist"; 
+						return 1
+					fi
+					goToOutput; printInfo "Selected playlist: $SELECTEDLIST";
+					infoBlock
+				} || { 
+					goToOutput; printError "Listname can't be empty"; 
+				}
+			;;
+		add)
+		    [ "$SELECTEDLIST" = "" -o "$SELECTEDLIST" = "none" ] && { goToOutput; printError "You have to select a playlist "; return 1; }
+		    local lfile="$PLAYLISTDIR/$SELECTEDLIST.lst"
+			local added="" 
+			local notadded=""
+		    args=$(echo "$@" | sed 's/'$action'//; s/^ *//')
+			while read i
+			do
+                if [[ $i =~ ^-?[0-9]+$ ]] 
+				then  
+					INDEX=$(($i-1)); 
+					COL=$(($i+12));
+					if [ ${QUERIES[$INDEX]} ]
+					then 
+					   echo "${QUERIES[$INDEX]}|${TITLES[$INDEX]}"	>> $lfile
+					   LISTQARRAY=(${LISTQARRAY[@]} ${QUERIES[$INDEX]})
+					   LISTTARRAY=(${LISTTARRAY[@]} ${TITLES[$INDEX]})
+					   added="$added $i"
+					else
+						notadded="$notadded $i"
+					fi
+				else 
+					notadded="$notadded $i"
+				fi
+				
+				notadded=$(echo $notadded|sed 's/^ *//')
+				added=$(echo $added|sed 's/^ *//')
+			done< <(echo $args|tr ' ' '\n')
+			[ "$added" != "" ] && { goToOutput; printInfo "$added added to $SELECTEDLIST"; }
+			[ "$notadded" != "" ] && { goToOutput +1; printWarning "Can't add $notadded to $SELECTEDLIST"; }	
+			;;
+		start)
+			[ "$SELECTEDLIST" = "" -o "$SELECTEDLIST" = "none" ] && { goToOutput; printError "You have to select a playlist "; return 1; }
+		    killMPlayer
+			goToOutput
+			printInfo "Playing ... Playlist:  $SELECTEDLIST" 
+			$PLAYALL "$(echo ${LISTQARRAY[@]})" >/dev/null 2>&1 &
+			disown
+			;;
+		clear)
+			[ "$SELECTEDLIST" = "" -o "$SELECTEDLIST" = "none" ] && { goToOutput; printError "You have to select a playlist "; return 1; }
+		    LISTQARRAY=()
+			LISTTARRAY=()
+			> $PLAYLISTDIR/$SELECTEDLIST.lst
+			goToOutput
+			printInfo "Playlist: $SELECTEDLIST is empty" 
+			;;
+		getlists) 
+			goToRightPanel
+			clearRightPanel 
+			local col=10
+			local row=100
+			
+			tput cup $col $row 
+			echo -e "${YELLOW}PLAYLISTS:   ${NC}"
+			col=$(($col+1))
+			row=$(($row+1))
+			tput cup  $((++col)) $row 
+			echo -e "Selected Playlist: ${BLUE}${SELECTEDLIST}${NC}"
+			tput cup  $((++col)) $row 
+			echo -e "Available Playlists: "
+			find $BASEDIR/playlists/ -type f -name "*.lst"|while read line
+			do
+			    name=$(basename $line|sed 's/\.lst$//')
+				tput cup  $((++col)) $row 
+				echo -e " - ${GREEN}${name}${NC}"
+			done
+			;;
+		*);;
+	esac
+}
+function showCommands(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Global variables: COMMANDS
+	# Desc: return command.list in the right-panels
+	#--------------------------------------------------------
+	local col=10	
+	tput cup $col 100 
+	drawLegend "  COMMANDS  "
+	col=$(($col+1))
+	for CMD in ${COMMANDS[*]}
+	do
+		tput cup $((++col)) 101 
+		echo -e "${GREEN}${CMD}${NC}"
+	done
+}
+function printError(){
+    echo -e "[${RED}ERROR${NC}] : $@"	
+}
+function printInfo(){
+    echo -e "[${BLUE}INFO${NC}] : $@"	
+}
+function printWarning(){
+    echo -e "[${YELLOW}WARN${NC}] : $@"	
+}
+function killMPlayer(){
+	# -------------------------------------------------------
+	# Arguments: none
+	# Desc: kill mplayer
+	#--------------------------------------------------------
+	$KILLALL $$ >/dev/null 2>&1
+}
+function inArray(){
+    # -------------------------------------------------------
+	# Arguments: $1 string , $2 array
+	# Desc: if array contains a string
+	# return 0/1
+	#--------------------------------------------------------
+    if [ "$(echo ${2[@]} | grep -o "$1" | wc -w)" -gt 0 ]
+	then 
+		return 0
+	else
+		return 1
+	fi
+}
+function installer(){
+	if [ ! -f "$MPlayer" -o ! -f "$YouDL" ]; 
+    then 
+		echo 
+		echo "bashtube needs mplayer, yourube-dl, ffmpeg, ffprobe"
+		echo "copy \"mplayer\" folder, yourube-dl, ffmpeg, ffprobe in bin folder and start again"
+		echo "otherwise let bashtube install the components for you"
+		echo 
+	fi
+	
+	
+	if [ ! -f "$MPlayer" ]; 
+	then
+	   read -p "Install mplayer [y/n]: " ANS
+	   if [ "$ANS" != "n" ]; then 
+	        cd ${BASEDIR}
+			mkdir -p ./tmp ./bin/mplayer
+	        curl -L -k --progress-bar https://sourceforge.net/projects/mplayer-win32/files/MPlayer%20and%20MEncoder/r38022%2Bgdb2a7c947e/MPlayer-generic-r38022%2Bgdb2a7c947e.7z/download -o ./tmp/MPlayer-1.3.0.7z
+			if [ $? -eq 0 ]
+			then 
+			   cd ${BASEDIR}/tmp
+			   ../bin/7z.exe x MPlayer-1.3.0.7z
+			   mv MPlayer-generic-r38022+gdb2a7c947e/* ../bin/mplayer
+			   cd ..
+			   rm -rf ./tmp
+			else
+               echo "Download mplayer was not possible"
+			   return 1
+			fi
+	   else 
+			return 1
+	   fi
+	fi
+	if [ ! -f "$YouDL" ]; 
+	then
+	   read -p "Install youtube-dl [y/n]: " ANS
+	   if [ "$ANS" != "n" ]; then 
+	        cd ${BASEDIR}
+			mkdir -p ./bin
+			curl -L -k --progress-bar  https://yt-dl.org/downloads/2018.04.03/youtube-dl.exe -o ./bin/youtube-dl.exe
+	        if [ $? -ne 0 ]
+			then 
+               echo "Download youtube-dl was not possible"
+			   return 1
+			fi
+	   else 
+			return 1
+	   fi
+	fi
+	
+	if [ ! -f "$FFPROBE" ]; 
+	then
+	   read -p "Install ffprobe [y/n]: " ANS
+	   if [ "$ANS" != "n" ]; then 
+	        cd ${BASEDIR}
+			mkdir -p ./bin ./tmp
+			curl -L --progress-bar https://github.com/vot/ffbinaries-prebuilt/releases/download/v3.2/ffprobe-3.2-win-32.zip -o ./tmp/ffprobe-3.2-win-32.zip
+	        if [ $? -eq 0 ]
+			then 
+			  cd ${BASEDIR}/tmp
+			  unzip -o ffprobe-3.2-win-32.zip
+			  mv ffprobe.exe ../bin
+			  cd ..
+			  rm -rf ./tmp
+			else
+              echo "Download ffprobe was not possible"
+			  return 1
+			fi
+		else 
+			return 1
+	   fi
+	fi
+	
+	if [ ! -f "$FFMPEG" ]; 
+	then
+	   read -p "Install ffmpeg [y/n]: " ANS
+	   if [ "$ANS" != "n" ]; then 
+	        cd ${BASEDIR}
+			mkdir -p ./bin ./tmp
+			curl -L --progress-bar https://github.com/vot/ffbinaries-prebuilt/releases/download/v3.2/ffmpeg-3.2-win-32.zip -o ./tmp/ffmpeg-3.2-win-32.zip
+	        if [ $? -eq 0 ]
+			then 
+			  cd ${BASEDIR}/tmp
+			  unzip -o ffmpeg-3.2-win-32.zip
+			  mv ffmpeg.exe ../bin
+			  cd ..
+			  rm -rf ./tmp
+			else
+              echo "Download ffmpeg was not possible"
+			  return 1
+			fi
+		else 
+			return 1
+	   fi
+	fi
+	chmod +x ${BASEDIR}/bin/*
+}
+#####################################################################################
+# Helpers:
+#
+#####################################################################################
+
+function cfg_writer ()
+{
+    IFS=' '$'\n'
+    fun="$(declare -F)"
+    fun="${fun//declare -f/}"
+    for f in $fun; do
+        [ "${f#cfg.section}" == "${f}" ] && continue
+        item="$(declare -f ${f})"
+        item="${item##*\{}"
+        item="${item%\}}"
+        item="${item//=*;/}"
+        vars="${item//=*/}"
+        eval $f
+        echo "[${f#cfg.section.}]"
+        for var in $vars; do
+            echo $var=\"${!var}\"
+        done
+    done
+}
+
+##############################################################################################################################
+# VARIABLES 
+##############################################################################################################################
+ROWS=41														# init Rows
+COLS=130													# init Columns
+
+CMDROW=$(($ROWS+1))											# Promp position
+OUTPUTROW=$(($ROWS-3))										# Promp position
+RESULTCOLS=70												# Result length
+INFOROW=3													# InfoBlock (settings) Row(y)
+INFOCOL=85													# InfoBlock (settings) Column(x) 
+HORCHAR="-" 												# Horizontal draw character
+VERCHAR="|"													# Vertical  draw character
+
+RIGHTPANELY=10
+RIGHTPANELX=100
+RIGHTPANELH=37
+RIGHTPANELW=42
+
+RED='\033[0;31m'											# RED-COLOR
+GREEN='\033[1;32m'											# GREEN-COLOR
+YELLOW='\033[0;33m'											# YELLOW-COLOR (Orange)
+BLUE='\033[1;34m'											# BLUE-COLOR
+GREENL='\033[0;32m'											# GREENLIGHT-COLOR
+NC='\033[0m' 												# NO-COLOR
+
+export BASEDIR="$(dirname $(readlink -f $0))"						# This folder
+export MPlayer="${BASEDIR}/bin/mplayer/mplayer.exe"		        # mplayer
+export YouDL="${BASEDIR}/bin/youtube-dl.exe"					    # youtube-dl 
+export YCookie="${BASEDIR}/config/cookie.txt"						# Cookie-file
+export YUrl="https://www.youtube.com"								# Youtube URL
+export YWatch="$YUrl/watch"										# Watch Url
+export YSearch="$YUrl/results\?search_query"						# Search URL
+export FFPROBE="${BASEDIR}/bin/ffprobe.exe";
+export FFMPEG="${BASEDIR}/bin/ffmpeg.exe";
+PLAYALL="${BASEDIR}/bin/playAll.sh"
+KILLALL="${BASEDIR}/bin/killAll.sh"
+HISTORYFILE=${BASEDIR}/config/bashtube_history
+PLAYLISTDIR="$BASEDIR/playlists"
+
+
+# *************************************
+# INI 
+# *************************************
+CONFIGFILE="${BASEDIR}/config/bashtube.ini"                 # Config-file (ini)
+[ -f "$CONFIGFILE" ] && cfg_parser $CONFIGFILE              # parse config-file (ini)
+# player section
+#--------------------------------------
+cfg.section.player                                          # get all variables from section player
+[ "$audio" != "" ] && export AUDIOON=$audio || export AUDIOON="false"
+[ "$video" != "" ] && export VIDEOON=$video || export VIDEOON="false"
+[ "$coordx" != "" ] && export COORDX=$coordx || export COORDX="50%"
+[ "$coordy" != "" ] && export COORDY=$coordy || export COORDY="50%"
+[ "$size" != "" ] && export SIZE=$size || export SIZE="800"
+# youtube section
+#--------------------------------------
+cfg.section.youtube                                         # get all variables from section player
+[ "$filter" != "" ] && FILTER=$filter || FILTER="none"
+setSearchFilter $FILTER init                                # set search filter (default none)
+PROXY=$proxy                                                # set proxy true/false
+PROXYHOST=$proxyhost										# set proxyhost
+PROXYUSER=$proxyuser										# set proxyuser
+PROXYPASSWORD=$proxypassword 								# set proxypassword
+setProxy "$PROXY" "$PROXYHOST" "$PROXYUSER" "$PROXYPASSWORD" 	
+# download section
+#--------------------------------------
+cfg.section.download
+[ "$downloaddir" != "" ] && DOWNLOADDIR=$downloaddir || DOWNLOADDIR="${BASEDIR}/download/%(title)s.%(ext)s"	# Download folder
+[ "$fileformat" != "" ] && DOWNLOADFORMAT=$fileformat || DOWNLOADFORMAT="mp3"	                            # Download File-Format
+[ "$bitrate" != "" ] && DOWNLOADRATE=$bitrate || DOWNLOADRATE="256" 
+# sytle section
+#--------------------------------------
+cfg.section.style
+#STYLE=(green cyan cyan blue white)   						# Style colors: lines, logo, legend-bgcolor, legend-color prompt
+STYLE=($linescolor $logocolor $legendbackground $legendcolor $promptcolor $commandscolor)
+
+# *************************************
+# ARRAYS 
+# *************************************
+TITLES=()													
+QUERIES=()
+TIMES=()
+MYPLAYLIST=()
+DOWNLOADS=()
+LISTQARRAY=()
+LISTTARRAY=()
+SELECTEDLIST="none"
+for((i=0; i<24; i++))
+do
+   DOWNLOADS[$i]=""
+done
+COMMANDS=(audio commands download exit filter help history next play playall playlist proxy proxyhost proxypassword proxyuser search stop update video)
+
+# *********************************************************************************** #
+#                                       MAIN                                          #
+# *********************************************************************************** #
+
+
+# software installer
+if ! installer ; 
+then 
+  echo "see you soon!"
+  exit
+fi 
+
+# start program
+history -r $HISTORYFILE
+set -o vi
+
+tput clear 
+
+tput civis
+drawPanels 
+drawVLine $(($INFOCOL-2)) 1 7
+drawVLine 98 5 31
+drawHeader
+infoBlock
+showCommands
+
+shopt -s extglob
+while :
+do
+   tput cup $CMDROW 5
+   clearLine
+   tput cup $CMDROW 1
+   
+   
+   stty echo
+   showCursor
+   setColor ${STYLE[4]}
+   read -e -p " cmd: " INPUT
+   clearTput
+   history -s "$INPUT"
+   hideCursor
+   stty -echo -icanon
+   clearOutput
+   case $(echo $INPUT|sed 's/^[ ]*//') in 
+		s?(earch)|s?(earch)" "*)
+			STRING=$(echo $INPUT |sed 's/search[ ]*//; s/s[ ]*//')
+			[ "$STRING" = "s" -o "$STRING" = "search" ] && STRING=""
+			getResults "$STRING"
+			;;
+		p?(lay)|p?(lay)" "*|[0-9]*)
+			SELECTED=$(echo $INPUT |sed 's/play//; s/p[ ]*//'|tr -d '[:space:]')
+			[ "$SELECTED" = "" ] && { cmdUsage play; continue; } 
+			[[ $SELECTED =~ ^-?[0-9]+$ ]] && { INDEX=$(($SELECTED-1)); COL=$(($SELECTED+12)); }|| continue
+			killMPlayer
+			[ ${QUERIES[$INDEX]} ] && { 
+				goToOutput
+				if play ${QUERIES[$INDEX]}; then 
+				    PROCID=$!
+					printInfo "Playing ... $SELECTED - ${GREEN}${TITLES[$INDEX]}${NC} [${QUERIES[$INDEX]}]" 
+					tput cup $COL 25
+					setColor yellow				 
+					printf "%-.${RESULTCOLS}s" ${TITLES[$INDEX]};
+					setColor white
+				else
+				   printWarning " change video or audio settings to true"
+				fi
+			}
+			;;
+		n?(ext))
+			INDEX=$(($INDEX+1))
+			COL=$(($INDEX+13))
+			killMPlayer
+			[ ${QUERIES[$INDEX]} ] && { 
+				 goToOutput 
+				 printInfo "Playing ... : $SELECTED - ${GREEN}${TITLES[$INDEX]}${NC} [${QUERIES[$INDEX]}]" 
+				 play ${QUERIES[$INDEX]};
+				 PROCID=$!
+				 tput cup $COL 25
+				 setColor yellow				 
+				 printf "%-.${RESULTCOLS}s" ${TITLES[$INDEX]};
+				 setColor white
+			     
+			}
+			;;
+		download*)
+			SELECTED=$(echo $INPUT |sed 's/download//'|tr -d '[:space:]')
+			[ "$SELECTED" = "" ] && continue
+			#[ "$SELECTED" = "status" ] && {
+			#   goToOutput
+			#   for ((i=0; i<${#DOWNLOADS[@]}; i++))
+			#   do 
+			#       echo "Download Status $i - ${DOWNLOADS[$i]}"
+			#   done
+			#   continue
+			#}
+			[[ $SELECTED =~ ^-?[0-9]+$ ]] && { INDEX=$(($SELECTED-1)); COL=$(($SELECTED+12)); }|| continue
+			[ ${QUERIES[$INDEX]} ] && { 
+				 goToOutput 
+				 printInfo "Downloading ... : $SELECTED - ${BLUE}${TITLES[$INDEX]}${NC} [${QUERIES[$INDEX]}]"
+				 download ${QUERIES[$INDEX]} $INDEX;
+				 DOWNLOADS[$INDEX]="in progress" 
+			}
+			;;
+		v?(ideo)*)
+		    VIDEOON_OPT=$(echo $INPUT |sed 's/video//; s/v[ ]*//'|tr -d '[:space:]')
+			case $VIDEOON_OPT in 
+			   "true"|"false") export VIDEOON=$VIDEOON_OPT
+			       goToOutput; printInfo "video = $VIDEOON"
+				   infoBlock
+				   ;;
+			   *)  cmdUsage video;;
+			esac
+			;;
+		a?(udio)*)
+		    AUDIOON_OPT=$(echo $INPUT |sed 's/audio//; s/au[ ]*//'|tr -d '[:space:]')
+			case $AUDIOON_OPT in 
+			   "true"|"false") export AUDIOON=$AUDIOON_OPT
+			       goToOutput; printInfo "audio = $AUDIOON"
+				   infoBlock
+				   ;;
+			   *)  cmdUsage audio;;
+			esac
+			;;
+		f?(ilter)*)
+			FILTER=$(echo $INPUT |sed 's/filter//; s/f[ ]*//'|tr -d '[:space:]')
+			case $FILTER in 
+				hour|day|week|month|year|none)
+						setSearchFilter $FILTER
+						infoBlock;;
+				*)  goToOutput; printError "Invalid filter $FILTER"
+				    cmdUsage filter;;
+			esac
+			;;
+		playall|all)
+		    [ ${#DOWNLOADS[@]} ] && { goToOutput; printWarning "No Titles to play"; continue; }
+			killMPlayer
+			goToOutput
+			printInfo "Playing ... All Titles from the Resultlist" 
+			playAll
+			;;
+		playlist|playlist" "*)
+		    STRING=$(echo $INPUT |sed 's/playlist//;s/^[ ]*//; s/[ ]*$// ')
+			playList $STRING
+			;;
+		"Stop"|"stop")
+		    killMPlayer  >/dev/null 2>&1
+			;;
+		proxy" "*)
+		    case $(echo $INPUT |sed 's/proxy//'|tr -d '[:space:]') in
+				"true") PROXY=true; setProxy "$PROXY" "$PROXYHOST" "$PROXYUSER" "$PROXYPASSWORD"
+				        goToOutput; printInfo "http_proxy = $http_proxy"
+						goToOutput +1; printInfo "https_proxy = $https_proxy"
+						;;
+				"false")PROXY=false; setProxy "$PROXY"
+				        goToOutput; printInfo "http_proxy = $http_proxy"
+						goToOutput +1; printInfo "https_proxy = $https_proxy"
+						;;
+				*)   	cmdUsage proxy;;
+			esac
+			infoBlock
+			;;
+		proxyuser)
+			tput cup $CMDROW 1
+			clearLine
+			tput cup $CMDROW 1
+			showCursor
+            read -e -p " Proxy-User: " USER
+			PROXYUSER="$USER"; setProxy "$PROXY" "$PROXYHOST" "$PROXYUSER" "$PROXYPASSWORD"
+			goToOutput; printInfo "http_proxy = $http_proxy"
+			goToOutput +1; printInfo "https_proxy = $https_proxy"
+			;;
+		proxyhost)
+			tput cup $CMDROW 1
+			clearLine
+			tput cup $CMDROW 1
+			showCursor
+            read -e -p " Proxy-Host[:Port]: " HOST
+			PROXYHOST="$HOST"; setProxy "$PROXY" "$PROXYHOST" "$PROXYUSER" "$PROXYPASSWORD"
+			goToOutput; printInfo "http_proxy = $http_proxy"
+			goToOutput +1; printInfo "https_proxy = $https_proxy"
+			;;
+		proxypassword)
+			tput cup $CMDROW 1
+			clearLine
+			tput cup $CMDROW 1
+			showCursor
+            read -e -s -p " Proxy-Password: " PASSWORD
+			PROXYPASSWORD="$PASSWORD"; setProxy "$PROXY" "$PROXYHOST" "$PROXYUSER" "$PROXYPASSWORD"
+			goToOutput; printInfo "http_proxy = $http_proxy"
+			goToOutput +1; printInfo "https_proxy = $https_proxy"
+			;;
+		history|h)
+				clearRightPanel
+				goToRightPanel
+				drawLegend "History"
+				counter=1
+				history|while read line
+				do
+				   goToRightPanel +$((++counter))
+				   echo $line|awk '{print $1, $NF}'
+				done
+				;;
+		commands) clearRightPanel; showCommands;;
+		update)
+			goToOutput;
+			printInfo "updating software ..."
+		    tput cup $OUTPUTROW 35;
+		    $YouDL -U |grep up-to-date
+		  ;;		
+		help*)
+		    STRING=$(echo $INPUT |sed 's/help//'|tr -d '[:space:]')
+			[ "$STRING" = "" ] && STRING="help" 
+			inarray=$(echo ${COMMANDS[@]} | grep -w "$STRING" | wc -w)
+			[ $inarray -eq 0 ] && { goToOutput; printError "command $STRING not found"; continue; } 
+		    cmdUsage $STRING
+			;;
+		"exit"|"quit"|"bye") 
+			killMPlayer;
+			history -w $HISTORYFILE; 
+			showCursor; 
+			stty echo; 
+			echo; 
+			break
+			;;
+		" "*) continue;;
+		*)  clearOutput
+			[ "$INPUT" = "" ] && continue; 
+			goToOutput; printError "Command $INPUT not found."
+			;;
+   esac
+done
