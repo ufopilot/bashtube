@@ -148,14 +148,6 @@ function playAll(){
 	$PLAYALL "$(echo ${QUERIES[@]})" >/dev/null 2>&1 &
 	disown
 }
-function playPlayList(){
-    # -------------------------------------------------------
-	# Arguments: none
-	# Desc: play my local created list
-	# -------------------------------------------------------
-	$($MPlayer -vo null -slave -idle -quiet -framedrop -cache 384 -cookies -cookies-file $YCookie $(cat playlist.txt) >/dev/null 2>&1)&
-	
-}
 function searchYoutube(){
     # -------------------------------------------------------
 	# Arguments: none 
@@ -318,7 +310,6 @@ function drawHeader(){
     echo "||//"
     tput cup $(($y+6)) $x
 	echo "________________________________________________________ By UFOPILOT"
-	#echo " ------------------------------------------------------- By UFOPILOT"
     
     setColor ${STYLE[1]} 
     tput cup 2 $(($x+9))
