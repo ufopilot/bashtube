@@ -1084,12 +1084,6 @@ COMMANDS=(audio commands download exit filter help history next play playall pla
 # *********************************************************************************** #
 
 
-# software installer
-if ! installer ; 
-then 
-  echo "see you soon!"
-  exit
-fi 
 
 # start program
 history -r $HISTORYFILE
