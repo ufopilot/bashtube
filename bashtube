@@ -218,9 +218,6 @@ function getResults(){
         for (i = 0; i < length(tl); i++){
 		    col=13+i;
 			system("tput cup " col " 2");
-			#system("tput setaf 1")
-			#printf "%4d| %-15s| %-130s \n",i,time,title;
-			#system("tput setaf 7")
 			printf "%4d| %-15s| %-."maxrescols"s \n",i+1,dr[i],tl[i];
 	   } 
    }')&
@@ -1137,14 +1134,6 @@ do
 		download*)
 			SELECTED=$(echo $INPUT |sed 's/download//'|tr -d '[:space:]')
 			[ "$SELECTED" = "" ] && continue
-			#[ "$SELECTED" = "status" ] && {
-			#   goToOutput
-			#   for ((i=0; i<${#DOWNLOADS[@]}; i++))
-			#   do 
-			#       echo "Download Status $i - ${DOWNLOADS[$i]}"
-			#   done
-			#   continue
-			#}
 			[[ $SELECTED =~ ^-?[0-9]+$ ]] && { INDEX=$(($SELECTED-1)); COL=$(($SELECTED+12)); }|| continue
 			[ ${QUERIES[$INDEX]} ] && { 
 				 goToOutput 
