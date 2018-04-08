@@ -507,8 +507,6 @@ function cmdUsage(){
 				tput cup $((++col)) $row
 				echo "desc: set a$1 on/off"
 				tput cup $((++col)) $row
-				echo "alias: ${1:0:1}"
-				tput cup $((++col)) $row
 				echo "uasge: $1 <true|false>"
 				tput cup $((++col)) $row
 				echo "example: $1 true"
@@ -532,8 +530,6 @@ function cmdUsage(){
 				tput cup $((++col)) $row
 				echo "desc: download youtube file"
 				tput cup $((++col)) $row
-				echo "alias: all"
-				tput cup $((++col)) $row
 				echo "uasge: $1 <int: from list>"
 				tput cup $((++col)) $row
 				echo "example: $1 6"
@@ -550,8 +546,6 @@ function cmdUsage(){
 				echo "desc: set youtube search-filter"
 				tput cup $((++col)) $row;
 				echo "uasge: filter <option>"
-				tput cup $((++col)) $row
-				echo "alias: f"
 				tput cup $((++col)) $row
 				echo "options:" 
 				tput cup $((++col)) $row
@@ -1144,7 +1138,7 @@ do
 				 DOWNLOADS[$INDEX]="in progress" 
 			}
 			;;
-		v?(ideo)*)
+		video*)
 		    VIDEOON_OPT=$(echo $INPUT |sed 's/video//; s/v[ ]*//'|tr -d '[:space:]')
 			case $VIDEOON_OPT in 
 			   "true"|"false") export VIDEOON=$VIDEOON_OPT
@@ -1154,7 +1148,7 @@ do
 			   *)  cmdUsage video;;
 			esac
 			;;
-		a?(udio)*)
+		audio*)
 		    AUDIOON_OPT=$(echo $INPUT |sed 's/audio//; s/au[ ]*//'|tr -d '[:space:]')
 			case $AUDIOON_OPT in 
 			   "true"|"false") export AUDIOON=$AUDIOON_OPT
@@ -1164,7 +1158,7 @@ do
 			   *)  cmdUsage audio;;
 			esac
 			;;
-		f?(ilter)*)
+		filter*)
 			FILTER=$(echo $INPUT |sed 's/filter//; s/f[ ]*//'|tr -d '[:space:]')
 			case $FILTER in 
 				hour|day|week|month|year|none)
@@ -1174,7 +1168,7 @@ do
 				    cmdUsage filter;;
 			esac
 			;;
-		playall|all)
+		playall)
 		    [ ${#DOWNLOADS[@]} ] && { goToOutput; printWarning "No Titles to play"; continue; }
 			killMPlayer
 			goToOutput
