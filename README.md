@@ -16,6 +16,5 @@ Screenshots
 
 
 Windows
-~~~~~~
 
 ![alt text](config/screenshot.png)
