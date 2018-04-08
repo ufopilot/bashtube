@@ -116,9 +116,9 @@ function download(){
 	# Desc: download youtube video and convert to mp3, ....
 	# -------------------------------------------------------	
 	(
-     $YouDL -o "$DOWNLOADDIR" --extract-audio --audio-quality ${DOWNLOADRATE}K --audio-format $DOWNLOADFORMAT --embed-thumbnail --add-metadata  $1 >/dev/null 2>/dev/null
-     #[ $? -eq 0 ] && DOWNLOADS[$2]="successfull" || DOWNLOADS[$INDEX]="failed"    
+          $YouDL -o "$DOWNLOADDIR" --extract-audio --audio-quality ${DOWNLOADRATE}K --audio-format $DOWNLOADFORMAT --embed-thumbnail --add-metadata  $1 >/dev/null 2>/dev/null
 	)&	
+        disown
 }
 function play(){
     # -------------------------------------------------------
@@ -201,21 +201,26 @@ function getResults(){
     RESULTS=$(searchYoutube)
     (echo "$RESULTS"|awk -F"|" -v maxrescols="$RESULTCOLS" '
       BEGIN{ 
-	     i=0; dr; tl;
+	         i=0; 
+                 #dr;
+                 # tl;
 		 system("tput cup 12 2; tput setaf 4");
 		 printf "%4s| %-15s| %-"maxrescols"s \n","#","Duration","Title";
 		 system("tput setaf 7; tput sgr0")
 	  }
  	  {  
-		if($1 == "") continue;
-		title="Title: "$1;
- 		time="Time:"$2;
- 		if (length($2)  < 5) time="List:"$2;
-		if (length($2) > 9) time="List";
-		tl[i] = title;
-		dr[i] = time;
-		if(i == 23) break;
- 		i++;
+		if($1 != "") {
+		   title="Title: "$1;
+ 		   time="Time:"$2;
+ 		   if (length($2)  < 5) time="List:"$2;
+		   if (length($2) > 9) time="List";
+                   
+		   if(i <= 23) {
+		     tl[i] = title;
+		     dr[i] = time;
+ 		     i++;
+                   }
+                }
       }
 	  END{
         for (i = 0; i < length(tl); i++){
@@ -224,7 +229,7 @@ function getResults(){
 			printf "%4d| %-15s| %-."maxrescols"s \n",i+1,dr[i],tl[i];
 	   } 
    }')&
-    usleep 500000
+    sleep 1 
     while read title time query
     do
       [ ${#time}  -lt 5 -o ${#time} -gt 9 ] && time="List: $time"
@@ -821,7 +826,8 @@ function killMPlayer(){
 	# Arguments: none
 	# Desc: kill mplayer
 	#--------------------------------------------------------
-	$KILLALL $$ >/dev/null 2>&1
+	$KILLALL $$ >/dev/null 2>&1 &
+        disown
 }
 function inArray(){
     # -------------------------------------------------------
@@ -984,15 +990,37 @@ BLUE='\033[1;34m'											# BLUE-COLOR
 GREENL='\033[0;32m'											# GREENLIGHT-COLOR
 NC='\033[0m' 												# NO-COLOR
 
-export BASEDIR="$(dirname $(readlink -f $0))"						# This folder
-export MPlayer="${BASEDIR}/bin/mplayer/mplayer.exe"		        # mplayer
-export YouDL="${BASEDIR}/bin/youtube-dl.exe"					    # youtube-dl 
+
+# for mac
+#########################################
+if uname -a | grep -i mac >/dev/null 2>&1
+then
+  export BASEDIR="$(dirname $0)"						# This folder
+  export YouDL="${BASEDIR}/bin/youtube-dl"					    # youtube-dl 
+  export MPlayer="${BASEDIR}/bin/mplayerx"		        # mplayer
+  export FFPROBE="${BASEDIR}/bin/ffprobe";
+  export FFMPEG="${BASEDIR}/bin/ffmpeg";
+  export PATH=$PATH:./bin
+  RED=""
+  GREEN=""
+  YELLOW=""
+  BLUE=""
+  GREENL=""
+  NC=""
+else 
+# for windows
+#########################################
+  export BASEDIR="$(dirname $(readlink -f $0))"						# This folder
+  export YouDL="${BASEDIR}/bin/youtube-dl.exe"					    # youtube-dl 
+  export MPlayer="${BASEDIR}/bin/mplayer/mplayer.exe"		        # mplayer
+  export FFPROBE="${BASEDIR}/bin/ffprobe.exe";
+  export FFMPEG="${BASEDIR}/bin/ffmpeg.exe";
+fi
+##
 export YCookie="${BASEDIR}/config/cookie.txt"						# Cookie-file
 export YUrl="https://www.youtube.com"								# Youtube URL
 export YWatch="$YUrl/watch"										# Watch Url
 export YSearch="$YUrl/results\?search_query"						# Search URL
-export FFPROBE="${BASEDIR}/bin/ffprobe.exe";
-export FFMPEG="${BASEDIR}/bin/ffmpeg.exe";
 PLAYALL="${BASEDIR}/bin/playAll.sh"
 KILLALL="${BASEDIR}/bin/killAll.sh"
 HISTORYFILE=${BASEDIR}/config/bashtube_history
@@ -1252,11 +1280,12 @@ do
 		    cmdUsage $STRING
 			;;
 		"exit"|"quit"|"bye") 
-			killMPlayer;
 			history -w $HISTORYFILE; 
 			showCursor; 
 			stty echo; 
 			echo; 
+                        clearTput
+			killMPlayer;
 			break
 			;;
 		" "*) continue;;
@@ -1266,3 +1295,5 @@ do
 			;;
    esac
 done
+echo
+echo
