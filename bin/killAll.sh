@@ -1,4 +1,7 @@
 #!/bin/bash
+#############################################################
+# kill all mplayer processes
+############################################################
 TPID=$1
 if ps -ef|grep -q mplayer; then
     ps -ef|grep mplayer |while read user pid ppid rest
