@@ -1,9 +1,9 @@
 #!/bin/bash
 ##############################################################################################################################
-# Script: 		bashtube
-# Author: 		UFOPILOT
-# Date:   		04.04.2018
-# Description: 	Youtube from commandline
+# Script: bashtube
+# Author: UFOPILOT
+# Date: 04.04.2018
+# Description: Youtube from commandline
 ##############################################################################################################################
 
 # *************************************
@@ -1195,7 +1195,7 @@ do
 			esac
 			;;
 		playall)
-		    [ ${#DOWNLOADS[@]} ] && { goToOutput; printWarning "No Titles to play"; continue; }
+		    [ ! ${QUERIES[0]} ] && { goToOutput; printWarning "No Titles to play"; continue; }
 			killMPlayer
 			goToOutput
 			printInfo "Playing ... All Titles from the Resultlist" 

@@ -2,3 +2,4 @@
 /config/
 /playlists/
 .DS_Store
+config/bashtube.ini
