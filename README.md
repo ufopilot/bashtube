@@ -17,7 +17,7 @@ Screenshots
 
 Windows
 
-![alt text](config/screenshot.png)
+![alt text](config/screenshot1.png)
 
 Mac
 
