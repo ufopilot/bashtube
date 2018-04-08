@@ -49,19 +49,6 @@ function cfg_parser (){
     ini[${#ini[*]} + 1]='}'    # add the last brace
     eval "$(echo "${ini[*]}")" # eval the result
 }
-_script()
-{
-  _script_commands=$(./admin.sh shortlist)
-
-  local cur prev
-  COMPREPLY=()
-  cur="${COMP_WORDS[COMP_CWORD]}"
-  COMPREPLY=( $(compgen -W "${_script_commands}" -- ${cur}) )
-
-  return 0
-}
-complete -o nospace -F _script ./admin.sh
-
 function setSearchFilter(){
 	# -------------------------------------------------------
 	# Arguments: $1 string
