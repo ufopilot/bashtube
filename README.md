@@ -10,3 +10,5 @@ Features
 - Requires mplayer, ffmpeg, ffprobe and youtube-dl
 
 bashtube is a terminal based program to search, stream and download music.  This implementation uses YouTube as a source of content and can play and download video as well as audio. 
+
+![alt text](config/screenshot.png)

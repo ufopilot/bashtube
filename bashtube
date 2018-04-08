@@ -3,32 +3,32 @@
 # Script: 		bashtube
 # Author: 		UFOPILOT
 # Date:   		04.04.2018
-# Description: 	Youtube from the command line
+# Description: 	Youtube from commandline
 ##############################################################################################################################
 
 # *************************************
 # FUNCTIONS
 # *************************************
 function cfg_parser (){
-	# -------------------------------------------------------
-	# Arguments: ini-file string than cfg.section.secname
-	# Desc: return sourced variables from ini-file 
-	#--------------------------------------------------------
+    # -------------------------------------------------------
+    # Arguments: ini-file string than cfg.section.secname
+    # Desc: return sourced variables from ini-file 
+    #--------------------------------------------------------
 	
-	# usage:
-	# parse the config file called 'myfile.ini', with the following
-	# contents::
-	#   [sec2]
-	#   var2='something'
-	#cfg_parser 'myfile.ini'
-	
-	# enable section called 'sec2' (in the file [sec2]) for reading
-	#cfg.section.sec2
-	
-	# read the content of the variable called 'var2' (in the file
-	# var2=XXX). If your var2 is an array, then you can use
-	# ${var[index]}
-	#echo "$var2"
+    # usage:
+    # parse the config file called 'myfile.ini', with the following
+    # contents::
+    #   [sec2]
+    #   var2='something'
+    #cfg_parser 'myfile.ini'
+
+    # enable section called 'sec2' (in the file [sec2]) for reading
+    #cfg.section.sec2
+
+    # read the content of the variable called 'var2' (in the file
+    # var2=XXX). If your var2 is an array, then you can use
+    # ${var[index]}
+    #echo "$var2"
 	
     ini="$(<$1)"                # read the file
     ini="${ini//[/\[}"          # escape [
@@ -49,6 +49,19 @@ function cfg_parser (){
     ini[${#ini[*]} + 1]='}'    # add the last brace
     eval "$(echo "${ini[*]}")" # eval the result
 }
+_script()
+{
+  _script_commands=$(./admin.sh shortlist)
+
+  local cur prev
+  COMPREPLY=()
+  cur="${COMP_WORDS[COMP_CWORD]}"
+  COMPREPLY=( $(compgen -W "${_script_commands}" -- ${cur}) )
+
+  return 0
+}
+complete -o nospace -F _script ./admin.sh
+
 function setSearchFilter(){
 	# -------------------------------------------------------
 	# Arguments: $1 string
@@ -128,6 +141,7 @@ function play(){
 	# -------------------------------------------------------	
 	if [ "$VIDEOON" = "true" -a "$AUDIOON" = "true" ]; then 
        ($MPlayer -slave -quiet -framedrop -cache 384 -xy ${SIZE} -geometry ${COORDX}:${COORDY} -cookies -cookies-file $YCookie $($YouDL -gf 18 "${YWatch}?v=$1") >/dev/null 2>&1) &
+	  
     fi
 	if [  "$VIDEOON" = "false" -a "$AUDIOON" = "true" ]; then 
        ($MPlayer -slave -quiet -vo null -framedrop -cache 384 -cookies -cookies-file $YCookie $($YouDL -gf 18 "${YWatch}?v=$1") >/dev/null 2>&1) &
@@ -189,6 +203,8 @@ function getResults(){
     goToOutput
     echo -e "[INFO] : search $(blue $TYPEDSTRING) (Please wait!)"
     tput cup 10 2
+    clearLine
+    tput cup 10 2
     drawLegend "RESULTS: $TYPEDSTRING"
     TITLES=()
     QUERIES=()
@@ -199,7 +215,7 @@ function getResults(){
     (echo "$RESULTS"|awk -F"|" -v maxrescols="$RESULTCOLS" '
       BEGIN{ 
 	     i=0; dr; tl;
-		 system("tput cup 12 2; tput setaf 4; tput setab 6");
+		 system("tput cup 12 2; tput setaf 4");
 		 printf "%4s| %-15s| %-"maxrescols"s \n","#","Duration","Title";
 		 system("tput setaf 7; tput sgr0")
 	  }
@@ -307,6 +323,7 @@ function drawHeader(){
     echo "||//"
     tput cup $(($y+6)) $x
 	echo "________________________________________________________ By UFOPILOT"
+	#echo " ------------------------------------------------------- By UFOPILOT"
     
     setColor ${STYLE[1]} 
     tput cup 2 $(($x+9))
@@ -1056,8 +1073,6 @@ COMMANDS=(audio commands download exit filter help history next play playall pla
 # *********************************************************************************** #
 #                                       MAIN                                          #
 # *********************************************************************************** #
-
-
 
 # start program
 history -r $HISTORYFILE
