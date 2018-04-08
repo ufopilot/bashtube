@@ -1,3 +1,4 @@
-download/
-config/
+download/*
+config/bashtube_history
+config/bashtube.ini
 .DS_Store
