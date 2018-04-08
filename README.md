@@ -1,15 +1,6 @@
 bashtube
 ===========
 
-.. image:: https://img.shields.io/pypi/v/mps-youtube.svg
-    :target: https://pypi.python.org/pypi/mps-youtube
-.. image:: https://img.shields.io/pypi/dm/mps-youtube.svg
-    :target: https://pypi.python.org/pypi/mps-youtube
-.. image:: https://img.shields.io/pypi/wheel/mps-youtube.svg
-    :target: http://pythonwheels.com/
-    :alt: Wheel Status
-
-
 Features
 --------
 - Search and play audio/video from YouTube
