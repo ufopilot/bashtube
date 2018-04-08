@@ -128,7 +128,6 @@ function play(){
 	# -------------------------------------------------------	
 	if [ "$VIDEOON" = "true" -a "$AUDIOON" = "true" ]; then 
        ($MPlayer -slave -quiet -framedrop -cache 384 -xy ${SIZE} -geometry ${COORDX}:${COORDY} -cookies -cookies-file $YCookie $($YouDL -gf 18 "${YWatch}?v=$1") >/dev/null 2>&1) &
-	  
     fi
 	if [  "$VIDEOON" = "false" -a "$AUDIOON" = "true" ]; then 
        ($MPlayer -slave -quiet -vo null -framedrop -cache 384 -cookies -cookies-file $YCookie $($YouDL -gf 18 "${YWatch}?v=$1") >/dev/null 2>&1) &
