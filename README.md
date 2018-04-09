@@ -16,8 +16,9 @@ Start
 -----------
 
 
-```shell
-dos2unix bashtube ./bin/*.sh ./config/* 
+```bash
+$> ./dos2unix bashtube ./bin/*.sh ./config/*
+$> ./bashtube
 ```
 
 Screenshots
